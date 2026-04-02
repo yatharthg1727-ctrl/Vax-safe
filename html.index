@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VaxSafe AI — Cold Chain Monitoring</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--safe:#00c6ff;--warn:#ff9f0a;--crit:#ff3b30;--bg:#060d1a;--glass:rgba(255,255,255,0.05);--border:rgba(255,255,255,0.10);--text:#e8f4ff;--sub:#7a9cc0;--accent:#00c6ff}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+body.critical-blink{animation:bgBlink 0.6s infinite alternate}
+@keyframes bgBlink{from{background:#060d1a}to{background:#1a0606}}
+#starfield{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse at 20% 50%,rgba(0,80,160,0.18) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(0,50,120,0.12) 0%,transparent 50%)}
+header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:1.1rem 2.5rem;background:rgba(6,13,26,0.88);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:.8rem}
+.logo-icon{width:40px;height:40px;background:linear-gradient(135deg,#00c6ff,#0050a0);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;box-shadow:0 0 20px rgba(0,198,255,0.4)}
+.logo h1{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:800;letter-spacing:.05em;background:linear-gradient(135deg,#00c6ff,#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-size:.62rem;color:var(--sub);display:block;font-weight:300;letter-spacing:.15em}
+.header-right{display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
+.live-badge{display:flex;align-items:center;gap:.4rem;font-size:.68rem;font-weight:500;letter-spacing:.1em;color:#4eff91;text-transform:uppercase}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#4eff91;box-shadow:0 0 8px #4eff91;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.5)}}
+.token-wrap{display:flex;align-items:center;gap:.5rem}
+.token-wrap input{background:var(--glass);border:1px solid var(--border);border-radius:8px;padding:.32rem .7rem;color:var(--text);font-size:.7rem;width:195px;outline:none;font-family:'DM Sans',sans-serif}
+.token-wrap input:focus{border-color:var(--accent)}
+.btn-sm{background:linear-gradient(135deg,#005fa3,#0088cc);border:none;border-radius:8px;color:#fff;font-size:.68rem;font-weight:600;padding:.32rem .8rem;cursor:pointer;letter-spacing:.05em;transition:opacity .2s}
+.btn-sm:hover{opacity:.85}
+#clock{font-family:'Orbitron',sans-serif;font-size:.72rem;color:var(--sub);min-width:115px;text-align:right}
+main{position:relative;z-index:5;max-width:1400px;margin:0 auto;padding:1.8rem 1.5rem;display:grid;grid-template-columns:1fr 355px;grid-template-rows:auto auto auto;gap:1.4rem}
+.card{background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:20px;padding:1.4rem;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,198,255,0.4),transparent)}
+.card-title{font-family:'Orbitron',sans-serif;font-size:.64rem;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--sub);margin-bottom:.9rem}
+.canvas-card{grid-column:1;grid-row:1;min-height:410px;display:flex;flex-direction:column}
+#threeCanvas{width:100%;flex:1;border-radius:12px;min-height:350px;cursor:grab}
+#threeCanvas:active{cursor:grabbing}
+.right-panel{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:1.2rem}
+.temp-display{text-align:center;padding:1.4rem 1rem}
+.temp-label{font-size:.62rem;letter-spacing:.2em;color:var(--sub);text-transform:uppercase;margin-bottom:.4rem}
+.temp-value{font-family:'Orbitron',sans-serif;font-size:4.2rem;font-weight:900;line-height:1;transition:color .5s}
+.temp-unit{font-size:1.7rem;vertical-align:super}
+.temp-range{font-size:.68rem;color:var(--sub);margin-top:.35rem}
+.state-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.4rem 1.2rem;border-radius:50px;font-family:'Orbitron',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-top:.6rem;transition:background .4s,box-shadow .4s}
+.state-badge.safe{background:rgba(0,198,255,.15);color:#00c6ff;box-shadow:0 0 20px rgba(0,198,255,.3)}
+.state-badge.warn{background:rgba(255,159,10,.15);color:#ff9f0a;box-shadow:0 0 20px rgba(255,159,10,.3)}
+.state-badge.crit{background:rgba(255,59,48,.15);color:#ff3b30;box-shadow:0 0 20px rgba(255,59,48,.4);animation:badgeBlink .5s infinite alternate}
+@keyframes badgeBlink{from{opacity:1}to{opacity:.4}}
+.gauge-bar-bg{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-top:.45rem}
+.gauge-bar-fill{height:100%;border-radius:4px;transition:width .8s cubic-bezier(.4,0,.2,1),background .5s}
+.gauge-labels{display:flex;justify-content:space-between;font-size:.58rem;color:var(--sub);margin-top:.25rem}
+.ai-msg{font-size:.8rem;line-height:1.65;color:var(--text);padding:.75rem 1rem;background:rgba(0,198,255,.05);border-left:2px solid var(--accent);border-radius:0 10px 10px 0}
+.expiry-row{display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid var(--border);font-size:.78rem}
+.expiry-row:last-child{border-bottom:none}
+.expiry-row .lbl{color:var(--sub)}
+.expiry-row .val{font-weight:600;font-family:'Orbitron',sans-serif;font-size:.72rem}
+.chart-card{grid-column:1;grid-row:2}
+#tempChart{max-height:215px}
+.stats-row{grid-column:1/3;grid-row:3;display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.stat-card{background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:16px;padding:1.1rem 1rem;display:flex;flex-direction:column;gap:.3rem;position:relative;overflow:hidden}
+.stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px}
+.stat-card.s1::after{background:linear-gradient(90deg,#00c6ff,transparent)}
+.stat-card.s2::after{background:linear-gradient(90deg,#4eff91,transparent)}
+.stat-card.s3::after{background:linear-gradient(90deg,#ff9f0a,transparent)}
+.stat-card.s4::after{background:linear-gradient(90deg,#bf5af2,transparent)}
+.stat-icon{font-size:1.3rem}
+.stat-val{font-family:'Orbitron',sans-serif;font-size:1.45rem;font-weight:800}
+.stat-lbl{font-size:.65rem;color:var(--sub);letter-spacing:.08em}
+#alarmBanner{display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:1000;background:linear-gradient(135deg,rgba(255,59,48,.92),rgba(180,20,10,.92));backdrop-filter:blur(12px);border:1px solid rgba(255,59,48,.6);border-radius:14px;padding:.75rem 2rem;font-family:'Orbitron',sans-serif;font-size:.76rem;font-weight:700;letter-spacing:.12em;color:#fff;animation:slideDown .4s ease,bangBlink .5s infinite alternate;box-shadow:0 0 40px rgba(255,59,48,.6);white-space:nowrap}
+@keyframes slideDown{from{top:60px;opacity:0}to{top:80px;opacity:1}}
+@keyframes bangBlink{from{box-shadow:0 0 40px rgba(255,59,48,.6)}to{box-shadow:0 0 80px rgba(255,59,48,.9)}}
+@media(max-width:900px){main{grid-template-columns:1fr;grid-template-rows:auto}.right-panel,.chart-card{grid-column:1;grid-row:auto}.stats-row{grid-column:1;grid-row:auto;grid-template-columns:repeat(2,1fr)}header{padding:1rem 1.2rem;flex-wrap:wrap;gap:.8rem}}
+@media(max-width:500px){.stats-row{grid-template-columns:1fr 1fr}.temp-value{font-size:3rem}}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:rgba(0,198,255,.3);border-radius:3px}
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div id="alarmBanner">&#9888; CRITICAL TEMPERATURE ALERT — IMMEDIATE ACTION REQUIRED</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#10052;</div>
+    <div>
+      <h1>VaxSafe AI</h1>
+      <span>Cold Chain Monitoring System v2.5</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>Live</div>
+    <div class="token-wrap">
+      <input type="text" id="tokenInput" placeholder="Blynk Auth Token" value="e6GmREw4L6j6PHk-Kh621o6MkQoogzqL"/>
+      <button class="btn-sm" onclick="updateToken()">Connect</button>
+    </div>
+    <div id="clock"></div>
+  </div>
+</header>
+
+<main>
+  <!-- 3D -->
+  <div class="card canvas-card">
+    <div class="card-title">&#9672; Live 3D Cold Storage Visualization — Drag to Rotate</div>
+    <canvas id="threeCanvas"></canvas>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="card temp-display">
+      <div class="card-title">&#9672; Core Temperature</div>
+      <div class="temp-label">Current Reading</div>
+      <div class="temp-value" id="tempVal">--<span class="temp-unit">&#176;C</span></div>
+      <div class="temp-range">Safe Range: &#8722;2&#176;C &nbsp;to&nbsp; +8&#176;C</div>
+      <div style="text-align:center;margin-top:.65rem">
+        <span class="state-badge safe" id="stateBadge">&#11044; Safe</span>
+      </div>
+      <div style="margin-top:1rem">
+        <div style="font-size:.6rem;color:var(--sub);letter-spacing:.1em;text-transform:uppercase">Temperature Gauge</div>
+        <div class="gauge-bar-bg"><div class="gauge-bar-fill" id="gaugeFill" style="width:50%;background:#00c6ff"></div></div>
+        <div class="gauge-labels"><span>&#8722;10&#176;</span><span>0&#176;</span><span>8&#176;</span><span>20&#176;</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">&#9672; AI Analysis Engine</div>
+      <div class="ai-msg" id="aiMsg">&#129302; Connecting to sensor network&#8230;</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">&#9672; Vaccine Lifecycle</div>
+      <div class="expiry-row"><span class="lbl">Batch ID</span><span class="val">VX-2025-0042</span></div>
+      <div class="expiry-row"><span class="lbl">Manufactured</span><span class="val" id="mfgDate">—</span></div>
+      <div class="expiry-row"><span class="lbl">Expires</span><span class="val" id="expDate">—</span></div>
+      <div class="expiry-row"><span class="lbl">Days Remaining</span><span class="val" id="daysLeft" style="color:#4eff91">—</span></div>
+      <div style="margin-top:.5rem">
+        <div class="gauge-bar-bg"><div class="gauge-bar-fill" id="expiryBar" style="width:100%;background:linear-gradient(90deg,#4eff91,#00c6ff)"></div></div>
+        <div style="font-size:.58rem;color:var(--sub);margin-top:.25rem;text-align:right" id="expiryPct">100% remaining</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div class="card chart-card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>&#9672; Temperature History (Last 30 Readings)</span>
+      <span id="trendArrow" style="font-size:.75rem;color:var(--sub)"></span>
+    </div>
+    <canvas id="tempChart"></canvas>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card s1"><div class="stat-icon">&#127782;&#65039;</div><div class="stat-val" id="statMin">—</div><div class="stat-lbl">Min Temperature</div></div>
+    <div class="stat-card s2"><div class="stat-icon">&#128200;</div><div class="stat-val" id="statMax">—</div><div class="stat-lbl">Max Temperature</div></div>
+    <div class="stat-card s3"><div class="stat-icon">&#9889;</div><div class="stat-val" id="statAvg">—</div><div class="stat-lbl">Avg Temperature</div></div>
+    <div class="stat-card s4"><div class="stat-icon">&#128276;</div><div class="stat-val" id="statAlerts">0</div><div class="stat-lbl">Alerts Triggered</div></div>
+  </div>
+</main>
+
+<script>
+/* ───── STARFIELD ───── */
+(function(){
+  const c=document.getElementById('starfield'),ctx=c.getContext('2d');
+  let W,H,stars=[];
+  function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight;}
+  function init(){stars=[];for(let i=0;i<200;i++)stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.3+.2,a:Math.random(),s:Math.random()*.003+.001});}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    stars.forEach(s=>{s.a+=s.s;if(s.a>1)s.s=-s.s;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(180,220,255,${Math.abs(s.a)})`;ctx.fill();});
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',()=>{resize();init();});
+  resize();init();draw();
+})();
+
+/* ───── CLOCK ───── */
+function tickClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false})+' UTC';}
+setInterval(tickClock,1000);tickClock();
+
+/* ───── EXPIRY ───── */
+const MFG=new Date();MFG.setHours(0,0,0,0);
+const EXP=new Date(MFG);EXP.setDate(EXP.getDate()+30);
+document.getElementById('mfgDate').textContent=MFG.toLocaleDateString('en-GB');
+document.getElementById('expDate').textContent=EXP.toLocaleDateString('en-GB');
+function updateExpiry(){
+  const diff=Math.max(0,Math.ceil((EXP-new Date())/86400000));
+  document.getElementById('daysLeft').textContent=diff+' days';
+  const pct=Math.round((diff/30)*100);
+  document.getElementById('expiryBar').style.width=pct+'%';
+  document.getElementById('expiryPct').textContent=pct+'% remaining';
+  const b=document.getElementById('expiryBar');
+  b.style.background=pct>50?'linear-gradient(90deg,#4eff91,#00c6ff)':pct>20?'linear-gradient(90deg,#ff9f0a,#ffcc00)':'linear-gradient(90deg,#ff3b30,#ff6060)';
+}
+updateExpiry();setInterval(updateExpiry,60000);
+
+/* ───── CHART ───── */
+const MAX_PTS=30;
+const chartLabels=[],chartTemps=[];
+for(let i=MAX_PTS;i>=0;i--){const d=new Date(Date.now()-i*5000);chartLabels.push(d.toLocaleTimeString('en-US',{hour12:false}));chartTemps.push(null);}
+const chartCtx=document.getElementById('tempChart').getContext('2d');
+const safePlugin={id:'safeBand',beforeDatasetsDraw(chart){const{ctx,scales:{x,y}}=chart;const top=y.getPixelForValue(8);const bot=y.getPixelForValue(-2);ctx.save();ctx.fillStyle='rgba(0,198,255,0.06)';ctx.fillRect(x.left,top,x.right-x.left,bot-top);ctx.restore();}};
+const tempChart=new Chart(chartCtx,{
+  type:'line',
+  plugins:[safePlugin],
+  data:{labels:chartLabels,datasets:[{label:'Temperature (°C)',data:chartTemps,borderColor:'#00c6ff',backgroundColor:'rgba(0,198,255,0.07)',borderWidth:2.5,fill:true,tension:.45,pointRadius:3,pointBackgroundColor:'#00c6ff',pointBorderColor:'transparent',pointHoverRadius:5}]},
+  options:{responsive:true,animation:{duration:500},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(6,13,26,.95)',titleColor:'#00c6ff',bodyColor:'#e8f4ff',borderColor:'rgba(0,198,255,.3)',borderWidth:1,callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(2)} °C`}}},scales:{x:{ticks:{color:'#4a6a8a',font:{size:9},maxTicksLimit:7},grid:{color:'rgba(255,255,255,.04)'}},y:{min:-10,max:20,ticks:{color:'#4a6a8a',font:{size:9},callback:v=>v+'°C'},grid:{color:'rgba(255,255,255,.04)'}}}}
+});
+function addTempPoint(t){
+  const now=new Date().toLocaleTimeString('en-US',{hour12:false});
+  chartLabels.push(now);chartTemps.push(t);
+  if(chartLabels.length>MAX_PTS){chartLabels.shift();chartTemps.shift();}
+  const col=t<-2||t>8?(t<-4||t>12?'#ff3b30':'#ff9f0a'):'#00c6ff';
+  tempChart.data.datasets[0].borderColor=col;
+  tempChart.data.datasets[0].backgroundColor=col.slice(0,7)+'18';
+  tempChart.update('none');
+}
+
+/* ───── STATS ───── */
+let allTemps=[],alertCount=0,prevBoxState='safe';
+function updateStats(t){
+  allTemps.push(t);
+  const mn=Math.min(...allTemps),mx=Math.max(...allTemps),av=allTemps.reduce((a,b)=>a+b,0)/allTemps.length;
+  document.getElementById('statMin').textContent=mn.toFixed(1)+'°';
+  document.getElementById('statMax').textContent=mx.toFixed(1)+'°';
+  document.getElementById('statAvg').textContent=av.toFixed(1)+'°';
+  document.getElementById('statAlerts').textContent=alertCount;
+}
+
+/* ───── THREE.JS ───── */
+let scene,camera,renderer,boxGroup,lid,boxState='safe';
+let particles,ptGeo,ptVel,ptLife,ptCount=200;
+let targetLidAngle=0;
+let isDragging=false,prevMouseX=0,prevMouseY=0;
+
+function initThree(){
+  const canvas=document.getElementById('threeCanvas');
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.setSize(canvas.offsetWidth,canvas.offsetHeight);
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(42,canvas.offsetWidth/canvas.offsetHeight,.1,100);
+  camera.position.set(0,2.2,5.8);camera.lookAt(0,0,0);
+
+  // LIGHTS
+  scene.add(new THREE.AmbientLight(0x9cd5ff,.55));
+  const dir=new THREE.DirectionalLight(0xffffff,1.3);dir.position.set(3,5,4);dir.castShadow=true;scene.add(dir);
+  const pt1=new THREE.PointLight(0x00c6ff,1.8,8);pt1.position.set(-2,2,2);scene.add(pt1);
+  const pt2=new THREE.PointLight(0x0044ff,.7,6);pt2.position.set(2,-1,-2);scene.add(pt2);
+
+  buildVaccineBox();
+  buildFrostParticles();
+
+  // drag
+  canvas.addEventListener('mousedown',e=>{isDragging=true;prevMouseX=e.clientX;prevMouseY=e.clientY;});
+  window.addEventListener('mouseup',()=>isDragging=false);
+  window.addEventListener('mousemove',e=>{if(!isDragging)return;boxGroup.rotation.y+=(e.clientX-prevMouseX)*.009;boxGroup.rotation.x+=(e.clientY-prevMouseY)*.006;prevMouseX=e.clientX;prevMouseY=e.clientY;});
+  canvas.addEventListener('touchstart',e=>{isDragging=true;prevMouseX=e.touches[0].clientX;prevMouseY=e.touches[0].clientY;},{passive:true});
+  window.addEventListener('touchend',()=>isDragging=false);
+  window.addEventListener('touchmove',e=>{if(!isDragging)return;boxGroup.rotation.y+=(e.touches[0].clientX-prevMouseX)*.009;boxGroup.rotation.x+=(e.touches[0].clientY-prevMouseY)*.006;prevMouseX=e.touches[0].clientX;prevMouseY=e.touches[0].clientY;},{passive:true});
+
+  window.addEventListener('resize',()=>{const w=canvas.offsetWidth,h=canvas.offsetHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();});
+  animateThree();
+}
+
+function mat(col,emis=0x000000,rough=.45,metal=.3){return new THREE.MeshStandardMaterial({color:col,emissive:emis,roughness:rough,metalness:metal});}
+
+function buildVaccineBox(){
+  boxGroup=new THREE.Group();
+
+  // BODY
+  const body=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.5,1.3),mat(0x08213f,0x001530,.5,.3));
+  body.position.y=-.05;body.castShadow=true;body.receiveShadow=true;boxGroup.add(body);
+
+  // BOTTOM RIM
+  const rim=new THREE.Mesh(new THREE.BoxGeometry(2.28,0.08,1.38),mat(0x1a4070,0x001840,.3,.5));
+  rim.position.y=-.8;boxGroup.add(rim);
+
+  // VERTICAL CORNER STRIPS
+  const vStrip=()=>new THREE.Mesh(new THREE.BoxGeometry(0.07,1.52,0.07),mat(0x2a6090,0x001840,.2,.7));
+  [[-1.12,-.05,-0.655],[1.12,-.05,-0.655],[-1.12,-.05,0.655],[1.12,-.05,0.655]].forEach(([x,y,z])=>{const s=vStrip();s.position.set(x,y,z);boxGroup.add(s);});
+
+  // HORIZONTAL STRIPE
+  const hStripe=new THREE.Mesh(new THREE.BoxGeometry(2.22,.13,1.32),mat(0x0088cc,0x003060,.25,.6));
+  hStripe.position.y=.18;boxGroup.add(hStripe);
+
+  // MEDICAL LABEL (canvas texture)
+  const lc=document.createElement('canvas');lc.width=320;lc.height=240;
+  const lx=lc.getContext('2d');
+  // background
+  lx.fillStyle='#f0f8ff';lx.fillRect(0,0,320,240);
+  // header bar
+  const hg=lx.createLinearGradient(0,0,320,0);hg.addColorStop(0,'#003f7f');hg.addColorStop(1,'#0077cc');
+  lx.fillStyle=hg;lx.fillRect(0,0,320,52);
+  lx.fillStyle='#fff';lx.font='bold 17px Arial';lx.textAlign='center';
+  lx.fillText('VACCINE STORAGE UNIT',160,34);
+  // cold chain text
+  lx.fillStyle='#0055a0';lx.font='bold 11px Arial';lx.fillText('❄  COLD CHAIN COMPLIANT  ❄',160,70);
+  // temp
+  lx.fillStyle='#222';lx.font='10px Arial';lx.fillText('Maintain: −2°C to +8°C',160,88);
+  lx.fillText('DO NOT FREEZE BELOW −2°C',160,102);
+  // red cross
+  const cx=160,cy=148,cs=30;
+  lx.fillStyle='#cc0000';lx.beginPath();lx.roundRect(cx-cs,cy-cs,cs*2,cs*2,6);lx.fill();
+  lx.fillStyle='#fff';lx.fillRect(cx-cs*.45,cy-cs*.9,cs*.9,cs*1.8);lx.fillRect(cx-cs*.9,cy-cs*.45,cs*1.8,cs*.9);
+  // bottom info
+  lx.fillStyle='#333';lx.font='9px monospace';
+  lx.fillText('LOT: VX-2025-0042',160,202);
+  lx.fillText('MFG: '+new Date().toLocaleDateString('en-GB'),160,215);
+  lx.fillText('WHO PREQUALIFIED',160,228);
+  const lt=new THREE.CanvasTexture(lc);
+  const labelMesh=new THREE.Mesh(new THREE.PlaneGeometry(1.15,.88),new THREE.MeshStandardMaterial({map:lt,roughness:.9,metalness:0}));
+  labelMesh.position.set(0,.08,.662);boxGroup.add(labelMesh);
+
+  // LID HINGE at y=0.75
+  lid=new THREE.Group();lid.position.y=.78;
+  const lidBody=new THREE.Mesh(new THREE.BoxGeometry(2.2,.18,1.3),mat(0x0c2f5a,0x001e40,.4,.4));
+  lidBody.position.y=.09;
+  const lidTop=new THREE.Mesh(new THREE.BoxGeometry(2.26,.05,1.36),mat(0x1a5080,0x001840,.2,.6));
+  lidTop.position.y=.19;
+  // handle
+  const handleBar=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.65,12),mat(0x50a0d0,0x002048,.2,.8));
+  handleBar.rotation.z=Math.PI/2;handleBar.position.set(0,.28,0);
+  const hL=new THREE.Mesh(new THREE.SphereGeometry(.06,8,8),mat(0x50a0d0,0x002048,.2,.8));hL.position.set(-.32,.28,0);
+  const hR=hL.clone();hR.position.set(.32,.28,0);
+  lid.add(lidBody,lidTop,handleBar,hL,hR);
+  boxGroup.add(lid);
+
+  // floor shadow
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(1.5,36),new THREE.MeshStandardMaterial({color:0x000010,transparent:true,opacity:.45}));
+  disc.rotation.x=-Math.PI/2;disc.position.y=-.79;boxGroup.add(disc);
+
+  scene.add(boxGroup);
+}
+
+function buildFrostParticles(){
+  ptCount=220;
+  const pos=new Float32Array(ptCount*3);
+  ptVel=[];ptLife=[];
+  for(let i=0;i<ptCount;i++){
+    const ang=Math.random()*Math.PI*2,r=1.5+Math.random()*.9;
+    pos[i*3]=Math.cos(ang)*r;pos[i*3+1]=Math.random()*2.2-1.1;pos[i*3+2]=Math.sin(ang)*r*.75;
+    ptVel.push({vx:(Math.random()-.5)*.012,vy:Math.random()*.014+.004,vz:(Math.random()-.5)*.012});
+    ptLife.push(Math.random());
+  }
+  ptGeo=new THREE.BufferGeometry();
+  ptGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const ptMat=new THREE.PointsMaterial({color:0xa0e8ff,size:.065,transparent:true,opacity:.65,sizeAttenuation:true});
+  particles=new THREE.Points(ptGeo,ptMat);
+  scene.add(particles);
+}
+
+function updateFrost(state){
+  const pos=ptGeo.attributes.position.array;
+  const col={safe:0xa0e8ff,warn:0xffd080,crit:0xff9080}[state];
+  particles.material.color.set(col);
+  for(let i=0;i<ptCount;i++){
+    ptLife[i]+=.007;pos[i*3]+=ptVel[i].vx;pos[i*3+1]+=ptVel[i].vy;pos[i*3+2]+=ptVel[i].vz;
+    if(ptLife[i]>1){ptLife[i]=0;const ang=Math.random()*Math.PI*2,r=1.5+Math.random()*.9;pos[i*3]=Math.cos(ang)*r;pos[i*3+1]=Math.random()*.2-1.1;pos[i*3+2]=Math.sin(ang)*r*.75;}
+  }
+  ptGeo.attributes.position.needsUpdate=true;
+}
+
+function animateThree(){
+  requestAnimationFrame(animateThree);
+  const t=Date.now()*.001;
+  if(!isDragging) boxGroup.rotation.y+=.0035;
+  boxGroup.position.y=Math.sin(t*.75)*.09;
+  // lid
+  targetLidAngle=boxState==='crit'?-Math.PI/2.8:0;
+  lid.rotation.x+=(targetLidAngle-lid.rotation.x)*.07;
+  // box tint
+  const tgtCol={safe:new THREE.Color(0x08213f),warn:new THREE.Color(0x2a1205),crit:new THREE.Color(0x2a0505)}[boxState];
+  boxGroup.traverse(obj=>{if(obj.isMesh&&obj.material.color&&obj.material.roughness&&obj.material.roughness<.85)obj.material.color.lerp(tgtCol,.04);});
+  updateFrost(boxState);
+  renderer.render(scene,camera);
+}
+
+/* ───── ALARM AUDIO ───── */
+let audioCtx=null,alarmActive=false,alarmTimer=null;
+function startAlarm(){
+  if(alarmActive)return;alarmActive=true;
+  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  function beep(){
+    if(!alarmActive)return;
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    o.type='square';o.frequency.setValueAtTime(900,audioCtx.currentTime);
+    g.gain.setValueAtTime(.12,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.28);
+    o.start();o.stop(audioCtx.currentTime+.28);
+    alarmTimer=setTimeout(beep,550);
+  }
+  beep();
+}
+function stopAlarm(){alarmActive=false;if(alarmTimer)clearTimeout(alarmTimer);}
+
+/* ───── STATE ENGINE ───── */
+let BLYNK_TOKEN='e6GmREw4L6j6PHk-Kh621o6MkQoogzqL';
+function updateToken(){BLYNK_TOKEN=document.getElementById('tokenInput').value.trim();}
+
+function applyTempState(t){
+  const recent=allTemps.slice(-6);
+  const trend=recent.length>2?recent[recent.length-1]-recent[0]:0;
+  const trendStr=trend>0.4?'&#128200; Rising':trend<-0.4?'&#128201; Falling':'&#10145; Stable';
+  let state,color,badgeClass,badgeText,aiText;
+
+  if(t>=-2&&t<=8){
+    state='safe';color='var(--safe)';badgeClass='safe';badgeText='&#11044; Safe';
+    if(trend>0.6)aiText=`&#129302; Temperature rising (${trend.toFixed(2)}°/interval). Currently safe at ${t.toFixed(2)}°C. Pre-cool storage if trend continues. ${trendStr}`;
+    else if(trend<-0.6)aiText=`&#129302; Temperature decreasing. Safe at ${t.toFixed(2)}°C. Cold chain integrity maintained. Monitor for freeze risk. ${trendStr}`;
+    else aiText=`&#129302; Optimal conditions. ${t.toFixed(2)}°C is within −2°C to 8°C range. Vaccine potency preserved. ${trendStr}`;
+  } else if((t>=-6&&t<-2)||(t>8&&t<=14)){
+    state='warn';color='var(--warn)';badgeClass='warn';badgeText='&#9888; Warning';
+    if(t>8)aiText=`&#129302; WARMING: ${t.toFixed(2)}°C exceeds safe upper limit. ${trendStr}. Inspect door seals and compressor. Notify logistics officer within 15 min.`;
+    else aiText=`&#129302; LOW TEMP: ${t.toFixed(2)}°C approaching freeze zone. ${trendStr}. Reduce cooling intensity. Vaccines may be partially compromised.`;
+    if(prevBoxState==='safe')alertCount++;
+  } else {
+    state='crit';color='var(--crit)';badgeClass='crit';badgeText='&#128680; CRITICAL';
+    if(t>14)aiText=`&#129302; &#9940; CRITICAL: ${t.toFixed(2)}°C — Far above safe range! Vaccine efficacy likely compromised. Isolate batch immediately. Do NOT administer. Contact WHO cold-chain officer.`;
+    else aiText=`&#129302; &#9940; CRITICAL: ${t.toFixed(2)}°C — Extreme cold! Vaccines may be frozen and denatured. Inspect batch for crystallization. Quarantine and report.`;
+    if(prevBoxState!=='crit')alertCount++;
+  }
+
+  prevBoxState=state;boxState=state;
+  document.getElementById('tempVal').style.color=color;
+  const badge=document.getElementById('stateBadge');badge.className='state-badge '+badgeClass;badge.innerHTML=badgeText;
+  document.getElementById('aiMsg').innerHTML=aiText;
+  const pct=Math.min(100,Math.max(0,((t+10)/30)*100));
+  const fill=document.getElementById('gaugeFill');fill.style.width=pct+'%';fill.style.background=color;
+  document.getElementById('trendArrow').innerHTML=trendStr;
+
+  if(state==='crit'){document.body.classList.add('critical-blink');document.getElementById('alarmBanner').style.display='block';startAlarm();}
+  else{document.body.classList.remove('critical-blink');document.getElementById('alarmBanner').style.display='none';stopAlarm();}
+}
+
+/* ───── BLYNK FETCH ───── */
+async function fetchTemp(){
+  try{
+    const res=await fetch(`https://blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&V0`);
+    if(!res.ok)throw new Error(res.status);
+    const txt=await res.text();
+    const t=parseFloat(txt);
+    if(isNaN(t))throw new Error('NaN');
+    document.getElementById('tempVal').innerHTML=t.toFixed(2)+'<span class="temp-unit">&#176;C</span>';
+    addTempPoint(t);updateStats(t);applyTempState(t);
+  } catch(e){
+    // Simulate realistic cold chain data on error
+    const base=3;const sim=base+Math.sin(Date.now()/9000)*5+(Math.random()-.5)*1.2;
+    document.getElementById('tempVal').innerHTML=sim.toFixed(2)+'<span class="temp-unit">&#176;C</span>';
+    addTempPoint(sim);updateStats(sim);applyTempState(sim);
+  }
+}
+
+/* ───── BOOT ───── */
+window.addEventListener('DOMContentLoaded',()=>{
+  initThree();
+  // prime chart with history
+  for(let i=0;i<15;i++){const v=2+Math.sin(i*.5)*3+Math.random()*1.5;allTemps.push(v);addTempPoint(v);}
+  fetchTemp();
+  setInterval(fetchTemp,5000);
+});
+</script>
+</body>
+</html>
